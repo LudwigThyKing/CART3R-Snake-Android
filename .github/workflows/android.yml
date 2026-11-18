@@ -1,118 +1,139 @@
 
-name: CART3R Snake APK Builder
+name: Snake Android APK Builder
 
 on:
-  workflow_dispatch:
   push:
     paths:
       - '**.zip'
       - '.github/workflows/android.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Snake V2.0 APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
+      # 1. Download repository files
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Set up Java
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
+      # 3. Set up Android SDK
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
+      # 4. Install the Android SDK required by the project
       - name: Install Android SDK packages
         run: |
           sdkmanager --install \
             "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "platform-tools"
+            "build-tools;35.0.0"
 
-      - name: Set up Gradle
+      # 5. Set up the known working Gradle version
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Extract Android project
+      # 6. Find the exact V2 project ZIP
+      - name: Find Snake V2.0 project
         shell: bash
         run: |
-          set -e
+          ZIP_FILE="$GITHUB_WORKSPACE/Snake_V2_Android_Project.zip"
 
-          echo "Searching for project ZIP..."
-
-          ZIP_FILE=$(find "$GITHUB_WORKSPACE" \
-            -type f -iname "*.zip" \
-            -not -path "*/.git/*" | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Project ZIP not found."
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: Snake_V2_Android_Project.zip was not found!"
+            echo "Make sure the ZIP is uploaded to the repository root."
             exit 1
           fi
 
-          mkdir -p "$GITHUB_WORKSPACE/extracted"
+          echo "Found V2.0 project ZIP:"
+          echo "$ZIP_FILE"
 
-          unzip -o "$ZIP_FILE" \
-            -d "$GITHUB_WORKSPACE/extracted"
+      # 7. Extract the V2 project
+      - name: Extract Snake V2.0 project
+        shell: bash
+        run: |
+          ZIP_FILE="$GITHUB_WORKSPACE/Snake_V2_Android_Project.zip"
+          EXTRACT_DIR="$RUNNER_TEMP/snake-v2-source"
 
-          PROJECT_FILE=$(find "$GITHUB_WORKSPACE/extracted" \
+          mkdir -p "$EXTRACT_DIR"
+          unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR"
+
+          echo "Project extracted successfully."
+
+      # 8. Detect the Android project directory
+      - name: Locate Android project
+        shell: bash
+        run: |
+          EXTRACT_DIR="$RUNNER_TEMP/snake-v2-source"
+
+          SETTINGS_FILE=$(find "$EXTRACT_DIR" \
             -type f \
-            \( -name settings.gradle \
-            -o -name settings.gradle.kts \) \
+            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
             -print -quit)
 
-          if [ -z "$PROJECT_FILE" ]; then
-            echo "ERROR: Gradle settings file not found."
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: Could not find settings.gradle!"
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PROJECT_FILE")
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+
+          if [ ! -d "$PROJECT_DIR/app" ]; then
+            echo "ERROR: Android app directory was not found!"
+            exit 1
+          fi
+
+          echo "Android project found:"
+          echo "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Project located at: $PROJECT_DIR"
-
-      - name: Build APK
+      # 9. Build the debug APK
+      - name: Build Snake V2.0 APK
         shell: bash
         run: |
-          set -e
-
           cd "$PROJECT_DIR"
 
-          echo "Compiling Snake Android..."
+          echo "Building Snake V2.0..."
+          gradle --no-daemon --stacktrace assembleDebug
 
-          gradle --no-daemon assembleDebug
-
-          echo "Searching for APK..."
-
-          APK_FILE=$(find "$PROJECT_DIR" \
+      # 10. Find and prepare the APK
+      - name: Prepare APK
+        shell: bash
+        run: |
+          APK_PATH=$(find "$PROJECT_DIR" \
             -type f \
             -path "*/build/outputs/apk/*/*.apk" \
             -print -quit)
 
-          if [ -z "$APK_FILE" ]; then
-            echo "ERROR: No APK generated."
-            find "$PROJECT_DIR" -type d -name outputs
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: APK file was not generated!"
             exit 1
           fi
 
-          echo "APK FOUND: $APK_FILE"
-
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
 
-          cp "$APK_FILE" \
+          cp "$APK_PATH" \
             "$GITHUB_WORKSPACE/apk-output/CART3R-Snake.apk"
 
-          echo "APK READY!"
+          echo "APK successfully prepared:"
+          ls -lh "$GITHUB_WORKSPACE/apk-output/CART3R-Snake.apk"
 
-      - name: Upload APK artifact
+      # 11. Upload the APK as a downloadable artifact
+      - name: Upload Snake APK
         uses: actions/upload-artifact@v4
         with:
           name: CART3R-Snake-APK
