@@ -44,21 +44,26 @@ jobs:
       - name: Extract Android project
         shell: bash
         run: |
+          set -e
+
           echo "Searching for project ZIP..."
 
-          ZIP_FILE=$(find . -maxdepth 4 -type f \
-            -iname "*.zip" \
-            -not -path "./.git/*" | head -n 1)
+          ZIP_FILE=$(find "$GITHUB_WORKSPACE" \
+            -type f -iname "*.zip" \
+            -not -path "*/.git/*" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
             echo "ERROR: Project ZIP not found."
             exit 1
           fi
 
-          mkdir -p extracted
-          unzip -o "$ZIP_FILE" -d extracted
+          mkdir -p "$GITHUB_WORKSPACE/extracted"
 
-          PROJECT_FILE=$(find extracted -type f \
+          unzip -o "$ZIP_FILE" \
+            -d "$GITHUB_WORKSPACE/extracted"
+
+          PROJECT_FILE=$(find "$GITHUB_WORKSPACE/extracted" \
+            -type f \
             \( -name settings.gradle \
             -o -name settings.gradle.kts \) \
             -print -quit)
@@ -72,27 +77,28 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Project found: $PROJECT_DIR"
+          echo "Project located at: $PROJECT_DIR"
 
       - name: Build APK
         shell: bash
         run: |
+          set -e
+
           cd "$PROJECT_DIR"
 
-          echo "Starting Android compilation..."
+          echo "Compiling Snake Android..."
 
           gradle --no-daemon assembleDebug
 
-          echo "Searching for generated APK..."
-
-          find "$PROJECT_DIR" -type f -name "*.apk" -print
+          echo "Searching for APK..."
 
           APK_FILE=$(find "$PROJECT_DIR" \
-            -type f -name "*.apk" -print -quit)
+            -type f \
+            -path "*/build/outputs/apk/*/*.apk" \
+            -print -quit)
 
           if [ -z "$APK_FILE" ]; then
-            echo "ERROR: No APK file found."
-            echo "Build output directory:"
+            echo "ERROR: No APK generated."
             find "$PROJECT_DIR" -type d -name outputs
             exit 1
           fi
@@ -104,7 +110,7 @@ jobs:
           cp "$APK_FILE" \
             "$GITHUB_WORKSPACE/apk-output/CART3R-Snake.apk"
 
-          echo "APK successfully prepared!"
+          echo "APK READY!"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
