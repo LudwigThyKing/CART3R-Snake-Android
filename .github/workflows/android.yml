@@ -8,39 +8,53 @@ on:
       - 'CART3R_Snake_Android_Project.zip'
       - '.github/workflows/android.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
-      - name: Set up Gradle
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --install \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platform-tools"
+
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
       - name: Extract Android project
         run: |
-          unzip CART3R_Snake_Android_Project.zip -d extracted
+          unzip -o CART3R_Snake_Android_Project.zip -d extracted
+          ls -la extracted/SnakeAndroid
 
       - name: Build APK
         run: |
           cd extracted/SnakeAndroid
           gradle --no-daemon assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: CART3R-Snake-APK
           path: extracted/SnakeAndroid/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
